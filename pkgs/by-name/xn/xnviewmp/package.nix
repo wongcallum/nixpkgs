@@ -2,6 +2,7 @@
   appimageTools,
   fetchurl,
   runCommand,
+  stdenvNoCC,
   lib,
   makeDesktopItem,
   copyDesktopItems,
@@ -23,7 +24,7 @@ let
         magick $src -resize 512x512 $out
       '';
 in
-appimageTools.wrapType2 rec {
+stdenvNoCC.mkDerivation rec {
   pname = "xnviewmp";
   version = "1.12.1";
 
@@ -32,7 +33,21 @@ appimageTools.wrapType2 rec {
     hash = "sha256-3iAi6/+GEaFiobk1n1aciHidOmdyDkmGKAgXvbqddQc=";
   };
 
+  # appimageTools.wrapType2 delegates to buildFHSEnv, whose ... catch-all
+  # silently drops extraInstallCommands, nativeBuildInputs and desktopItems.
+  # Build the wrapped AppImage as an input instead, so that this derivation
+  # installs the desktop entry and the icon.
+  dontUnpack = true;
+
+  appimage = appimageTools.wrapType2 {
+    inherit pname version src;
+    extraPkgs = pkgs: [
+      pkgs.qt6.qtbase
+    ];
+  };
+
   nativeBuildInputs = [
+    appimage
     copyDesktopItems
   ];
 
@@ -47,12 +62,15 @@ appimageTools.wrapType2 rec {
     })
   ];
 
-  extraPkgs = pkgs: [
-    pkgs.qt6.qtbase
-  ];
+  installPhase = ''
+    runHook preInstall
 
-  extraInstallCommands = ''
+    mkdir -p $out/
+    cp -r ${appimage}/bin $out/bin
+
     install -m 444 -D ${icon} $out/share/icons/hicolor/512x512/apps/xnviewmp.png
+
+    runHook postInstall
   '';
 
   passthru = {
